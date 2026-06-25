@@ -1276,20 +1276,22 @@ function addMsg(tab, role, content, imgUrl, apiLabel){
   const m=document.createElement('div'); m.className='msg '+role;
   const av=document.createElement('div'); av.className='avatar'; av.textContent=role==='ai'?'◐':'You'.slice(0,1);
   if(role==='ai') av.textContent='◐'; else av.textContent='∎';
-  const b=document.createElement('div'); b.className='bubble';
   
-  // Add API badge if provided
-  let badgeHtml = '';
-  if(apiLabel){
+  // Add API badge next to avatar
+  let badgeEl = null;
+  if(apiLabel && role==='ai'){
+    badgeEl = document.createElement('div');
     const isChatGPT = apiLabel.includes('ChatGPT');
     const isGemini = apiLabel.includes('Gemini');
     const bgColor = isChatGPT ? '#3b82f6' : isGemini ? '#10b981' : '#6b7280';
     const icon = isChatGPT ? '🔵' : isGemini ? '🟢' : '⚡';
-    const text = isChatGPT ? 'ChatGPT' : isGemini ? 'Gemini' : 'API';
-    badgeHtml = `<div style="display:inline-block;background:${bgColor};color:white;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-bottom:8px;margin-right:auto">${icon} ${text}</div>`;
+    const text = isChatGPT ? 'GPT' : isGemini ? 'Gemini' : 'API';
+    badgeEl.innerHTML = `<span style="display:inline-block;background:${bgColor};color:white;padding:2px 6px;border-radius:3px;font-size:9px;font-weight:700;margin-top:2px;white-space:nowrap">${icon} ${text}</span>`;
+    badgeEl.style.textAlign = 'center';
   }
   
-  if(content || apiLabel) b.innerHTML = (badgeHtml || '') + mdLite(content || '');
+  const b=document.createElement('div'); b.className='bubble';
+  if(content) b.innerHTML=mdLite(content);
   if(imgUrl){
     const im=document.createElement('img');im.src=imgUrl;im.className='gen-img';
     im.style.cursor='zoom-in'; im.onclick=()=>openLightbox(imgUrl);
@@ -1304,7 +1306,10 @@ function addMsg(tab, role, content, imgUrl, apiLabel){
     dl.onclick=()=>downloadImage(imgUrl,fname);
     bar.appendChild(pv); bar.appendChild(dl); b.appendChild(bar);
   }
-  m.appendChild(av); m.appendChild(b); box.appendChild(m);
+  m.appendChild(av); 
+  if(badgeEl) m.appendChild(badgeEl);
+  m.appendChild(b); 
+  box.appendChild(m);
   box.scrollTop=box.scrollHeight;
   return b;
 }
