@@ -1271,13 +1271,25 @@ function mdLite(s){
   }
   return s;
 }
-function addMsg(tab, role, content, imgUrl){
+function addMsg(tab, role, content, imgUrl, apiLabel){
   const box=document.getElementById(tab+'-msgs');
   const m=document.createElement('div'); m.className='msg '+role;
   const av=document.createElement('div'); av.className='avatar'; av.textContent=role==='ai'?'◐':'You'.slice(0,1);
   if(role==='ai') av.textContent='◐'; else av.textContent='∎';
   const b=document.createElement('div'); b.className='bubble';
-  if(content) b.innerHTML=mdLite(content);
+  
+  // Add API badge if provided
+  let badgeHtml = '';
+  if(apiLabel){
+    const isChatGPT = apiLabel.includes('ChatGPT');
+    const isGemini = apiLabel.includes('Gemini');
+    const bgColor = isChatGPT ? '#3b82f6' : isGemini ? '#10b981' : '#6b7280';
+    const icon = isChatGPT ? '🔵' : isGemini ? '🟢' : '⚡';
+    const text = isChatGPT ? 'ChatGPT' : isGemini ? 'Gemini' : 'API';
+    badgeHtml = `<div style="display:inline-block;background:${bgColor};color:white;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-bottom:8px;margin-right:auto">${icon} ${text}</div>`;
+  }
+  
+  if(content || apiLabel) b.innerHTML = (badgeHtml || '') + mdLite(content || '');
   if(imgUrl){
     const im=document.createElement('img');im.src=imgUrl;im.className='gen-img';
     im.style.cursor='zoom-in'; im.onclick=()=>openLightbox(imgUrl);
@@ -1299,7 +1311,8 @@ function addMsg(tab, role, content, imgUrl){
 function addThinking(tab,label){
   const box=document.getElementById(tab+'-msgs');
   const m=document.createElement('div'); m.className='msg ai'; m.dataset.thinking='1';
-  m.innerHTML=`<div class="avatar">◐</div><div class="bubble"><div class="thinking"><span></span><span></span><span></span></div></div>`;
+  const labelHtml = label ? `<span style="font-size:11px;color:var(--muted);margin-bottom:6px;display:block;text-transform:uppercase;letter-spacing:.05em">${label}</span>` : '';
+  m.innerHTML=`<div class="avatar">◐</div><div class="bubble">${labelHtml}<div class="thinking"><span></span><span></span><span></span></div></div>`;
   box.appendChild(m); box.scrollTop=box.scrollHeight; return m;
 }
 function removeThinking(tab){
@@ -1382,13 +1395,11 @@ async function generateBoardOutputs_Hybrid() {
 
   S.board.busy = true;
   document.getElementById('board-send').disabled = true;
-  const th = addThinking('board');
+  
+  const panels = a.durasi.k === '1' ? 6 : a.durasi.k === '2' ? 8 : a.durasi.k === '3' ? 12 : 9;
+  const dur = a.durasi.k === '1' ? 10 : a.durasi.k === '2' ? 15 : a.durasi.k === '3' ? 20 : 30;
 
-  try {
-    const panels = a.durasi.k === '1' ? 6 : a.durasi.k === '2' ? 8 : a.durasi.k === '3' ? 12 : 9;
-    const dur = a.durasi.k === '1' ? 10 : a.durasi.k === '2' ? 15 : a.durasi.k === '3' ? 20 : 30;
-
-    const userPrompt = `Create storyboard outputs in JSON format (no markdown, no backticks, JSON only):
+  const userPrompt = `Create storyboard outputs in JSON format (no markdown, no backticks, JSON only):
 {
   "video_json": { "global": { "instruction": "...", "product": "...", "style": "...", "aspect_ratio": "...", "total_duration_seconds": ${dur}, "motion": "smooth motion", "dialogue_language": "${a.bahasa?.val || 'Malay'}" }, "scenes": [ { "scene": 1, "start": "0s", "end": "Xs", "visual": "...", "action": "...", "camera": "...", "dialogue_malay": "...", "on_screen_text": "...", "audio_sfx": "..." } ] },
   "shot_list": "**Music:** [genre]\\n\\n| Scene | Time | Visual | Dialog/VO | Overlay | Audio/SFX |\\n|..."
@@ -1396,9 +1407,17 @@ async function generateBoardOutputs_Hybrid() {
 
 Theme: ${a.tema.val}. Style: ${a.style.val}. Duration: ${dur}s. Aspect Ratio: ${a.ar.val}. Cast: ${a.cast.val}. Language: ${a.bahasa?.val || 'Malay'}. Generate exactly ${panels} scenes. Final scene = HERO SHOT.`;
 
-    // Use ChatGPT if available, else Gemini
+  try {
+    // Determine which API to use
+    const useChat = CHATGPT_KEY ? true : false;
+    const apiLabel = useChat ? '🔵 ChatGPT' : '🟢 Gemini';
+    const th = addThinking('board', apiLabel);
+    
+    toast(useChat ? 'ChatGPT generating text...' : 'Gemini generating text...');
+    console.log(`[API] Using ${useChat ? 'ChatGPT' : 'Gemini'} for text generation`);
+
     let textReply;
-    if(CHATGPT_KEY){
+    if(useChat){
       textReply = await chatGPTText([
         {role:'system',content:'You are a professional storyboard director. Output ONLY valid JSON—no markdown, no backticks, no commentary.'},
         {role:'user',content:userPrompt}
@@ -1419,11 +1438,11 @@ Theme: ${a.tema.val}. Style: ${a.style.val}. Duration: ${dur}s. Aspect Ratio: ${
       return;
     }
 
-    addMsg('board','ai','🎞️ **Video Prompt JSON**');
+    addMsg('board','ai','🎞️ **Video Prompt JSON**',null,apiLabel);
     let videoJsonPretty=JSON.stringify(parsed.video_json,null,2);
     addCopyBox(videoJsonPretty,'Copy JSON');
 
-    addMsg('board','ai','📋 **Shot List**');
+    addMsg('board','ai','📋 **Shot List**',null,apiLabel);
     addMsg('board','ai',parsed.shot_list);
 
   }catch(err){
@@ -2001,8 +2020,11 @@ async function generateSheetImage(){
       : '⚠️ I don\'t see an uploaded image. Please attach the product/character photo (📎 below) before generating the sheet.');
     return;
   }
-  const th=addThinking('sheet');
+  const th=addThinking('sheet','🟢 Gemini Image');
   const note=addMsg('sheet','ai',t('genImg'));
+  
+  toast('Gemini generating character sheet...');
+  console.log('[API] Generating character sheet with Gemini...');
   
   // timeout protection: if stuck > 60s, show retry button
   const timeoutId = setTimeout(()=>{
@@ -2023,7 +2045,7 @@ async function generateSheetImage(){
     note.remove();
     if(imgUrl){
       S.sheet.image=imgUrl;
-      addMsg('sheet','ai', LANG==='ms'?'✅ **Reference sheet siap!**':'✅ **Reference sheet ready!**', imgUrl);
+      addMsg('sheet','ai', LANG==='ms'?'✅ **Reference sheet siap!**':'✅ **Reference sheet ready!**', imgUrl, 'Gemini');
       const menu = LANG==='ms'
         ? 'Apa seterusnya?\n1. Jana semula sheet\n2. Tukar tetapan\n3. Tukar angle (8/10/12)\n4. Guna untuk Universal Storyboard Gen'
         : 'What next?\n1. Regenerate sheet\n2. Change settings\n3. Change angles (8/10/12)\n4. Use for Universal Storyboard Gen';
@@ -2411,8 +2433,11 @@ async function generateBoardImage(isFix){
     return;
   }
   S.board.busy=true; document.getElementById('board-send').disabled=true;
-  const th=addThinking('board');
+  const th=addThinking('board','🟢 Gemini Image');
   const note=addMsg('board','ai',t('genImg'));
+  
+  toast('Gemini generating storyboard image...');
+  console.log('[API] Generating storyboard image with Gemini...');
   
   // timeout protection: if stuck > 60s, show retry button
   const timeoutId = setTimeout(()=>{
@@ -2439,7 +2464,7 @@ async function generateBoardImage(isFix){
     removeThinking('board'); note.remove();
     if(imgUrl){
       S.board.image=imgUrl;
-      addMsg('board','ai', LANG==='ms'?'✅ **Storyboard anda siap!**':'✅ **Your storyboard is ready!**', imgUrl);
+      addMsg('board','ai', LANG==='ms'?'✅ **Storyboard anda siap!**':'✅ **Your storyboard is ready!**', imgUrl, 'Gemini');
       await generateBoardOutputs_Hybrid();  // generates video JSON + shot list in one call
       showPostImageMenu();
     }else{
